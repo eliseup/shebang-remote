@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: ../
+      dockerfile: docker/dev/app/Dockerfile
+    image: shebang-remote-app-dev:latest
+
+  postgresql:
+    build:
+      context: ../
+      dockerfile: docker/dev/postgresql/Dockerfile
+    image: shebang-remote-postgresql-dev:latest
