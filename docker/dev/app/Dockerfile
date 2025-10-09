@@ -24,11 +24,11 @@ RUN apt-get update && \
     # User settings and environment
     addgroup --gid 1000 --system app && \
     adduser --uid 1000 --system --group app && \
-    mkdir -p /usr/src/app
+    mkdir -p /usr/src/server
 
-RUN chown app. /usr/src/app -R
+RUN chown app. /usr/src/server -R
 
-WORKDIR /usr/src/app
+WORKDIR /usr/src/server
 USER app
 
 CMD ["tail", "-f", "/dev/null"]

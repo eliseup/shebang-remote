@@ -1,4 +1,4 @@
-# 🐧 #! Shebang Remote
+# 🐧 #! Remote
 
 **Shebang Remote** is a tool for managing Linux systems remotely via Discord. It integrates with PostgreSQL to store command history, permissions, and user data.
 

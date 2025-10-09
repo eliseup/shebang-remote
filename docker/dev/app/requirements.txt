@@ -41,3 +41,7 @@ websockets==15.0.1
 # END pip freeze for fastapi[standard]==0.118.2
 
 # Extra requirements go here
+alembic==1.16.5
+SQLAlchemy==2.0.43
+pydantic-settings==2.11.0
+psycopg==3.2.10

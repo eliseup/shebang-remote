@@ -14,13 +14,13 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ${PWD}/src:/usr/src/app
+      - ${PWD}/src/server:/usr/src/server
     networks:
       - net-bridge
     ports:
       - "8000:8000"
     env_file:
-      - ${PWD}/src/.env_dev
+      - ${PWD}/src/server/.env_dev
 
   postgresql:
     image: shebang-remote-postgresql-dev:latest
@@ -39,7 +39,7 @@ services:
     ports:
       - "6432:5432"
     env_file:
-      - ${PWD}/src/.env_dev
+      - ${PWD}/src/server/.env_dev
 
 volumes:
   postgresql-db:
