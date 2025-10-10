@@ -1,78 +1,53 @@
-from typing import Any
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from sqlalchemy import create_engine, Engine, NullPool
-from sqlalchemy.orm import scoped_session, sessionmaker, Session
+from sqlalchemy import select
 
-from server.models import BaseModel
-from server.config import settings
+from server.database import get_db_engine, DBSession
+from server.models import BaseModel, CommandStatusReference
+from server.views import router as server_views_router
+
+
+def post_init_database() -> None:
+    """Perform post-initialization tasks for the database."""
+
+    # Populates CommandStatusReference table.
+    command_status = [
+        ('Pending', 'pending'),
+        ('Completed', 'completed'),
+    ]
+
+    with DBSession() as session:
+        for status in command_status:
+            if not session.scalar(
+                    select(CommandStatusReference).filter_by(title_internal=status[1])):
+                session.add(
+                    CommandStatusReference(
+                        title=status[0],
+                        title_internal=status[1],
+                    )
+                )
+
+        session.commit()
+
+
+def init_database() -> None:
+    """Initialize the database creating tables if they do not exist."""
+    BaseModel.metadata.create_all(bind=get_db_engine())
+
+    # Run post-initialization tasks.
+    post_init_database()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print('Starting server...')
-    conn = settings.SQLALCHEMY_DATABASE_URI
-    engine = create_engine(
-        conn, echo=False, echo_pool=False, pool_recycle=50, pool_size=7, max_overflow=10
-    )
-
-    BaseModel.session = scoped_session(
-        sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    )
-
-    #with engine.begin() as conn:
-    #    await conn.execute(BaseModel.metadata.create_all)
-
-    BaseModel.metadata.create_all(bind=engine)
+    init_database()
 
     yield
-    print('Stopping server...')
-    BaseModel.session.remove()
 
 
 app = FastAPI(lifespan=lifespan)
 
-@app.get('/machines')
-async def get_machines():
-    """
-    Return active machines.
-    Active machines are those that sent a 'ping' in the last 5 minutes.
-    """
-    return {'message': 'machines active'}
-
-
-@app.post('/register_machine')
-async def create_update_machines(payload: dict[str, Any]):
-    """
-    Create or update machines.
-    """
-
-
-@app.post('/scripts')
-async def create_scripts(payload: dict[str, Any]):
-    """
-    Create a script.
-    """
-
-
-@app.post('/execute')
-async def execute(payload: dict[str, Any]):
-    """
-    Schedule a command for a machine.
-    """
-
-
-@app.get('/commands/{machine_id}')
-async def get_commands(machine_id: int):
-    """
-    Get pending commands for an agent.
-    """
-
-
-@app.post('/commands/{command_id}/result')
-async def post_command(command_id: int):
-    """
-    Receives a result of an executed command.
-    """
+# Register routes
+app.include_router(server_views_router)

@@ -1,12 +1,10 @@
 import datetime
 
-from decimal import Decimal
 from dataclasses import dataclass
 
-from sqlalchemy import (func, MetaData, update, delete, String, Text, DECIMAL, TIMESTAMP, DATE,
-                        ForeignKey)
-from sqlalchemy.orm import (DeclarativeBase, declared_attr, Mapped, InstrumentedAttribute,
-                            scoped_session, mapped_column)
+from sqlalchemy import func, MetaData, String, Text, TIMESTAMP, DATE, ForeignKey
+from sqlalchemy.orm import (DeclarativeBase, declared_attr, Mapped,
+                            scoped_session, mapped_column, relationship)
 
 
 @dataclass
@@ -33,7 +31,7 @@ def utc_now() -> datetime.datetime:
 
 
 class BaseModel(DeclarativeBase):
-    """The base model class."""
+    """Base model class that offers common functionality."""
     __abstract__ = True
 
     metadata: MetaData = MetaData(naming_convention=NAMING_CONVENTION)
@@ -67,13 +65,47 @@ class BaseModel(DeclarativeBase):
 
     @declared_attr.directive
     def __tablename__(cls):
-        module = cls.__module__.split('.')[1]
         table = ''.join(f"_{i}" if i.isupper() else i for i in cls.__name__)
-        return f'{module}_{table}'.lower()
+        return table.lstrip('_').lower()
 
 
 class Machine(BaseModel):
     """The machine model class."""
-    external_id: Mapped[BaseTypes.str255]
+    external_id: Mapped[BaseTypes.str255] = mapped_column(unique=True, nullable=False)
     name: Mapped[BaseTypes.str45]
     last_seen: Mapped[BaseTypes.timestamp]
+
+    commands: Mapped[list['Command']] = relationship(
+        back_populates='machine',
+    )
+
+
+class Script(BaseModel):
+    """The script model class."""
+    name: Mapped[BaseTypes.str45] = mapped_column(unique=True, nullable=False)
+    content: Mapped[BaseTypes.text]
+
+
+class CommandStatusReference(BaseModel):
+    """
+    The command status reference model class.
+    """
+    title: Mapped[BaseTypes.str45] = mapped_column(nullable=False, unique=True)
+    title_internal: Mapped[BaseTypes.str45] = mapped_column(nullable=False, unique=True)
+
+
+class Command(BaseModel):
+    """The command model class."""
+    machine_id: Mapped[int] = mapped_column(
+        ForeignKey('machine.id', ondelete='CASCADE',)
+    )
+
+    status_id: Mapped[int] = mapped_column(
+        ForeignKey('command_status_reference.id', ondelete='SET NULL',)
+    )
+
+    machine: Mapped[Machine] = relationship(back_populates='commands')
+    status: Mapped[CommandStatusReference] = relationship()
+
+    script_name: Mapped[BaseTypes.text]
+    output: Mapped[BaseTypes.text | None]
