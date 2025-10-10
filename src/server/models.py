@@ -3,8 +3,7 @@ import datetime
 from dataclasses import dataclass
 
 from sqlalchemy import func, MetaData, String, Text, TIMESTAMP, DATE, ForeignKey
-from sqlalchemy.orm import (DeclarativeBase, declared_attr, Mapped,
-                            scoped_session, mapped_column, relationship)
+from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column, relationship
 
 
 @dataclass
@@ -45,8 +44,6 @@ class BaseModel(DeclarativeBase):
         BaseTypes.date: DATE,
     }
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-
     created_at: Mapped[BaseTypes.timestamp] = mapped_column(
         default=utc_now,
         server_default=func.now(),
@@ -60,9 +57,6 @@ class BaseModel(DeclarativeBase):
         server_default=func.now(),
     )
 
-    # Custom parameter to facilitate the use of the database session.
-    session: scoped_session = None
-
     @declared_attr.directive
     def __tablename__(cls):
         table = ''.join(f"_{i}" if i.isupper() else i for i in cls.__name__)
@@ -70,8 +64,18 @@ class BaseModel(DeclarativeBase):
 
 
 class Machine(BaseModel):
-    """The machine model class."""
-    external_id: Mapped[BaseTypes.str255] = mapped_column(unique=True, nullable=False)
+    """
+    The machine model class.
+
+    Represents a machine (agent).
+
+    Attributes:
+        - external_id: Unique identifier for the machine (e.g., UUID or external system ID)
+        - name: Human-readable name for the machine
+        - last_seen: Timestamp of the last time the machine checked in
+        - commands: List of commands assigned to this machine
+    """
+    id: Mapped[BaseTypes.str255] = mapped_column(primary_key=True)
     name: Mapped[BaseTypes.str45]
     last_seen: Mapped[BaseTypes.timestamp]
 
@@ -81,23 +85,66 @@ class Machine(BaseModel):
 
 
 class Script(BaseModel):
-    """The script model class."""
-    name: Mapped[BaseTypes.str45] = mapped_column(unique=True, nullable=False)
+    """
+    The script model class.
+
+    Represents a script that can be executed on a machine.
+
+    Attributes:
+        - name: Unique name for the script
+        - content: The actual script content (e.g., any Linux command.)
+
+    Usage:
+        Scripts are assigned to commands for execution on machines.
+    """
+    name: Mapped[BaseTypes.str45] = mapped_column(primary_key=True)
     content: Mapped[BaseTypes.text]
 
 
 class CommandStatusReference(BaseModel):
     """
     The command status reference model class.
+
+    Represents a reference table for command statuses.
+
+    Attributes:
+        - title: Human-readable status (e.g., 'Pending', 'Completed')
+        - title_internal: Internal system status identifier (must be unique)
+
+    Usage:
+        Used to track and categorize the status of commands.
     """
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[BaseTypes.str45] = mapped_column(nullable=False, unique=True)
     title_internal: Mapped[BaseTypes.str45] = mapped_column(nullable=False, unique=True)
 
 
 class Command(BaseModel):
-    """The command model class."""
-    machine_id: Mapped[int] = mapped_column(
+    """
+    The command model class.
+
+    Represents a command to be executed on a specific machine.
+
+    Each Command is associated with a Machine and a Script,
+    and tracks its execution status via CommandStatusReference.
+
+    Relationships:
+        - machine: The Machine this command is assigned to.
+        - script: The Script to be executed on the machine.
+        - status: Current execution status of the command.
+
+    Usage:
+        This model is used by the API endpoint `GET /commands/{machine_id}`
+        to retrieve pending commands for a specific agent/machine.
+    """
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    machine_id: Mapped[BaseTypes.str255] = mapped_column(
         ForeignKey('machine.id', ondelete='CASCADE',)
+    )
+
+    script_name: Mapped[BaseTypes.str45] = mapped_column(
+        ForeignKey('script.name', ondelete='CASCADE',)
     )
 
     status_id: Mapped[int] = mapped_column(
@@ -105,7 +152,7 @@ class Command(BaseModel):
     )
 
     machine: Mapped[Machine] = relationship(back_populates='commands')
+    script: Mapped[Script] = relationship()
     status: Mapped[CommandStatusReference] = relationship()
 
-    script_name: Mapped[BaseTypes.text]
     output: Mapped[BaseTypes.text | None]
