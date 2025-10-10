@@ -48,8 +48,9 @@ class CommandSchema(BaseModel):
 class CommandResponseSchema(DefaultResponseSchemaMixin, CommandSchema):
     id: int
     status: CommandStatusReferenceResponseSchema
+    script: ScriptSchema
     output: str | None
 
 
 class CommandResultSchema(BaseModel):
-    output: str
+    output: dict[str, str]

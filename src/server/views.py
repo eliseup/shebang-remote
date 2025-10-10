@@ -27,9 +27,7 @@ def get_object_or_404(
 
     return obj
 
-
 router = APIRouter()
-
 
 @router.get('/machines', response_model=list[MachineResponseSchema])
 async def list_machines(session: Session = Depends(get_db_session)):
@@ -44,7 +42,6 @@ async def list_machines(session: Session = Depends(get_db_session)):
     )).all()
 
     return machines
-
 
 @router.post('/register_machine', response_model=MachineResponseSchema)
 async def create_update_machine(
@@ -81,7 +78,6 @@ async def create_update_machine(
     session.refresh(existing_machine)
     return existing_machine
 
-
 @router.post('/scripts', response_model=ScriptResponseSchema)
 async def create_script(
         model: ScriptSchema,
@@ -96,7 +92,6 @@ async def create_script(
     session.refresh(new_script)
 
     return new_script
-
 
 @router.post('/execute', response_model=CommandResponseSchema)
 async def schedule_machine_command(
@@ -129,7 +124,6 @@ async def schedule_machine_command(
 
     return new_command
 
-
 @router.get('/commands/{machine_id}', response_model=list[CommandResponseSchema])
 async def list_pending_commands(
         machine_id: str,
@@ -157,7 +151,6 @@ async def list_pending_commands(
     ).all()
 
     return pending_commands
-
 
 @router.post('/commands/{command_id}/result')
 async def store_command_result(

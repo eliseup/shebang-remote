@@ -31,7 +31,6 @@ def post_init_database() -> None:
 
         session.commit()
 
-
 def init_database() -> None:
     """Initialize the database creating tables if they do not exist."""
     BaseModel.metadata.create_all(bind=get_db_engine())
@@ -39,13 +38,11 @@ def init_database() -> None:
     # Run post-initialization tasks.
     post_init_database()
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_database()
 
     yield
-
 
 app = FastAPI(lifespan=lifespan)
 

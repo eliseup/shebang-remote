@@ -13,9 +13,7 @@ def get_db_engine() -> Engine:
 
     return engine
 
-
 DBSession = sessionmaker(autocommit=False, autoflush=False, bind=get_db_engine())
-
 
 def get_db_session() -> Session:
     session = DBSession()
