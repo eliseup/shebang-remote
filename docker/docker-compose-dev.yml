@@ -48,4 +48,4 @@ networks:
   net-bridge:
     driver: bridge
     driver_opts:
-      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+      com.docker.network.bridge.host_binding_ipv4: "192.168.18.76"

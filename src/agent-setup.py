@@ -7,16 +7,22 @@ import subprocess
 from pathlib import Path
 
 
+def pre_install_deps() -> None:
+    """Install setup dependencies."""
+    subprocess.run(['apt', 'update'])
+    subprocess.run(['apt', 'install', '-y', 'python3-pip',])
+    subprocess.run(['apt', 'install', '-y', 'python3-aiohttp',])
+
 def systemd_setup(remove: bool = False) -> None:
     """Install or remove the systemd service for the Shebang Remote Agent."""
-    systemd_file = Path('/etc/systemd/system/shebang-remote-agent.service')
+    systemd_file = Path('/etc/systemd/system/agent.service')
     agent_src = Path('agent.py')
     agent_dest = Path('/usr/local/bin/agent.py')
 
     if remove:
         # Remove agent's systemd config
-        subprocess.run(['systemctl', 'stop', 'shebang-remote-agent'])
-        subprocess.run(['systemctl', 'disable', 'shebang-remote-agent'])
+        subprocess.run(['systemctl', 'stop', 'agent'])
+        subprocess.run(['systemctl', 'disable', 'agent'])
         subprocess.run(['systemctl', 'daemon-reload'])
         systemd_file.unlink()
 
@@ -50,12 +56,12 @@ def systemd_setup(remove: bool = False) -> None:
         systemd_file.write_text(systemd_file_content)
 
         subprocess.run(['systemctl', 'daemon-reload'])
-        subprocess.run(['systemctl', 'enable', 'shebang-remote-agent'])
-        subprocess.run(['systemctl', 'start', 'shebang-remote-agent'])
+        subprocess.run(['systemctl', 'enable', 'agent'])
+        subprocess.run(['systemctl', 'start', 'agent'])
 
 def agent_config_setup(remove: bool = False) -> None:
     """Create or remove the configuration directory and file for the agent."""
-    config_file_path = Path('/etc/shebang-remote/config.json')
+    config_file_path = Path('/etc/agent/config.json')
     config_file_parent_path = config_file_path.parent
 
     if remove:
@@ -83,6 +89,7 @@ def uninstall():
 
 def install():
     """Install and configure the agent and its systemd service."""
+    pre_install_deps()
     agent_config_setup()
     systemd_setup()
 

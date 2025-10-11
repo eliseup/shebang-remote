@@ -8,40 +8,101 @@ import uuid
 import os
 
 from pathlib import Path
-from typing import Any
-from aiohttp import ClientSession
+from typing import Any, Dict
+from aiohttp import ClientSession, ClientResponse
 
-CONFIG_FILE_PATH = Path('/etc/shebang-remote/config.json')
 UUID_PATH = Path('/etc/agent_uuid')
 
-async def load_config():
-    with open(CONFIG_FILE_PATH) as f:
-        return json.load(f)
+async def load_config() -> Dict[str, str]:
+    """Reads the agent's configuration file and returns it as a dictionary."""
+    config_file_path = Path('/etc/agent/config.json')
 
-def get_or_create_uuid():
-    if UUID_PATH.exists():
-        return UUID_PATH.read_text().strip()
-    new_uuid = str(uuid.uuid4())
-    UUID_PATH.write_text(new_uuid)
-    return new_uuid
+    if config_file_path.is_file():
+        return json.loads(config_file_path.read_text())
+
+    return {}
+
+def get_or_create_agent_uuid() -> str:
+    random_uuid = str(uuid.uuid4())
+
+    try:
+        system_uuid = subprocess.run(
+            ['dmidecode', '-s', 'system-uuid'], check=True, text=True, capture_output=True
+        )
+
+        system_uuid = system_uuid.stdout.strip()
+
+        if system_uuid:
+            return system_uuid
+        return random_uuid
+
+    except subprocess.CalledProcessError:
+        return random_uuid
+
+def get_or_create_agent_name() -> str:
+    random_name = str(f'agent-{str(uuid.uuid4())[:5]}')
+
+    try:
+        name = subprocess.run(['hostname'], check=True, text=True, capture_output=True)
+        name = name.stdout.strip()
+
+        if name:
+            return name
+        return random_name
+
+    except subprocess.CalledProcessError:
+        return random_name
+
+async def make_request(
+        session: ClientSession,
+        *,
+        url: str,
+        method: str,
+        payload: dict | None = None,
+) -> ClientResponse | None:
+    """This function makes a request to the given URL and returns the response."""
+    try:
+        async with session.request(method, url, json=payload) as response:
+            return response
+    except Exception as e:
+        print('Something went wrong:', e)
+
+    return None
 
 async def register_agent(
         session: ClientSession,
         server_url: str,
         agent_id: str,
-        name: str
-) -> None:
+        agent_name: str
+) -> bool:
+    """
+    Register this agent (machine) to the server.
+    """
     url = f'{server_url}/register_machine'
-    payload = {'id': agent_id, 'name': name}
+    payload = {'id': agent_id, 'name': agent_name}
 
-    try:
-        async with session.post(url, json=payload) as resp:
-            if resp.status == 200:
-                print(f'Registered successfully as {name} ({agent_id})')
-            else:
-                print(f'Registration failed: {resp.status}')
-    except Exception as e:
-        print(f'Registration error: {e}')
+    response = await make_request(session, url=url, method='POST', payload=payload)
+
+    if response and response.status == 200:
+        config_file = Path('/etc/agent/config.json')
+        config_content = dict(
+            server_url=server_url, agent_id=agent_id, agent_name=agent_name, interval=300
+        )
+
+        try:
+            with open(config_file, 'w') as f:
+                json.dump(config_content, f, indent=4)
+        except Exception as e:
+            print('Something went wrong when writing the agent configuration file:', e)
+        else:
+            print(f'Registered successfully as {agent_name} ({agent_id})')
+
+            return True
+
+    else:
+        print(f'Failed to register as {agent_name} ({agent_id})')
+
+    return False
 
 async def send_command_result(
         session: ClientSession,
@@ -93,14 +154,13 @@ async def check_pending_commands(
         server_url: str,
         agent_id: str
 ) -> list[dict[str, Any]]:
+    """Request the server to check if there are any pending commands for this agent."""
     url = f'{server_url}/commands/{agent_id}'
 
-    try:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                return await resp.json()
-    except Exception as e:
-        print(f'Pending commands fetch error: {e}')
+    response = await make_request(session, url=url, method='GET')
+
+    if response and response.status == 200:
+        return await response.json()
 
     return []
 
@@ -109,39 +169,53 @@ async def main():
         description='#! Remote - An Agent to manage Linux systems remotely from Discord.'
     )
 
-    subparsers = parser.add_subparsers(dest='command', required=True)
+    subparsers = parser.add_subparsers(dest='command', required=False)
 
     # Subcommand: register
-    reg = subparsers.add_parser('register', help='Register agent with the server')
+    reg = subparsers.add_parser(
+        'register', help='Register this agent (machine) to the server'
+    )
     reg.add_argument('--name', required=False, help='Name of the machine')
-    reg.add_argument('--server', required=False, help='Base URL of the FastAPI server')
+    reg.add_argument('--server', required=True, help='Base URL of the FastAPI server')
 
     args = parser.parse_args()
 
-    #config = await load_config()
-    #agent_id = get_or_create_uuid()
-    #server_url = config['server_url']
-    #name = config['name']
-    #interval = config.get('interval', 300)
+    if args.command == 'register':
+        print('Registering agent...')
+        agent_id = get_or_create_agent_uuid()
+        agent_name = get_or_create_agent_name()
 
-    async with aiohttp.ClientSession() as session:
-        if args.command == 'register':
-            print('to register', args)
-            #await register_agent(session, server_url, agent_id, name)
+        async with aiohttp.ClientSession() as session:
+            registered = await register_agent(
+                session, server_url=args.server, agent_id=agent_id, agent_name=agent_name
+            )
 
-        """while True:
-            commands_response = await check_pending_commands(session, server_url, agent_id)
+            if registered:
+                print('Done! :)')
+            else:
+                print('Failed :(')
 
-            for cmd_response in commands_response:
-                cmd_id = cmd_response.get('id', '')
-                cmd = cmd_response.get('script', {}).get('content')
+    else:
+        config = await load_config()
 
-                if cmd_id and cmd:
-                    await execute_command(
-                        session, server_url, command_id=cmd_id, command=cmd
-                    )
+        server_url = config['server_url']
+        agent_id = config['agent_id']
+        interval = config.get('interval', 300)
 
-            await asyncio.sleep(interval)"""
+        async with aiohttp.ClientSession() as session:
+            while True:
+                commands_response = await check_pending_commands(session, server_url, agent_id)
+    
+                for cmd_response in commands_response:
+                    cmd_id = cmd_response.get('id', '')
+                    cmd = cmd_response.get('script', {}).get('content')
+    
+                    if cmd_id and cmd:
+                        await execute_command(
+                            session, server_url, command_id=cmd_id, command=cmd
+                        )
+    
+                await asyncio.sleep(interval)
 
 if __name__ == '__main__':
     asyncio.run(main())
