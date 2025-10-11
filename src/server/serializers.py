@@ -1,6 +1,7 @@
+import json
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class DefaultResponseSchemaMixin:
@@ -23,6 +24,10 @@ class MachineResponseSchema(DefaultResponseSchemaMixin, MachineSchema):
 class ScriptSchema(BaseModel):
     name: str
     content: str
+
+    @field_validator('name', mode='before')
+    def normalize_name(cls, value):
+        return value.replace(' ', '').lower().strip()
 
     class Config:
         from_attributes = True
@@ -53,4 +58,11 @@ class CommandResponseSchema(DefaultResponseSchemaMixin, CommandSchema):
 
 
 class CommandResultSchema(BaseModel):
-    output: dict[str, str]
+    output: str | None
+
+    @field_validator('output', mode='before')
+    def normalize_output(cls, value):
+        try:
+            return json.dumps(value)
+        except TypeError:
+            return value

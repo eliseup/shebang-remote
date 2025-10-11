@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 import argparse
+import sys
+
 import aiohttp
 import asyncio
 import subprocess
 import json
 import uuid
-import os
+import logging
 
 from pathlib import Path
 from typing import Any, Dict
-from aiohttp import ClientSession, ClientResponse
+from aiohttp import ClientSession, ContentTypeError
 
-UUID_PATH = Path('/etc/agent_uuid')
+
+# Basic logging setup
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="%(name)s - %(levelname)s - %(message)s",
+)
 
 async def load_config() -> Dict[str, str]:
     """Reads the agent's configuration file and returns it as a dictionary."""
@@ -59,15 +67,23 @@ async def make_request(
         url: str,
         method: str,
         payload: dict | None = None,
-) -> ClientResponse | None:
-    """This function makes a request to the given URL and returns the response."""
+) -> tuple[int, list[Any] | dict[str, Any] | None]:
+    """This function makes a request to the given URL and returns (status, json) tuple."""
+    status, response_data = 0, None
+
     try:
         async with session.request(method, url, json=payload) as response:
-            return response
-    except Exception as e:
-        print('Something went wrong:', e)
+            status = response.status
 
-    return None
+            try:
+                response_data = await response.json()
+            except ContentTypeError:
+                logging.exception('Error when getting response data:', exc_info=True)
+
+    except Exception:
+        logging.exception('Something went wrong when making a request.', exc_info=True)
+
+    return status, response_data
 
 async def register_agent(
         session: ClientSession,
@@ -81,9 +97,9 @@ async def register_agent(
     url = f'{server_url}/register_machine'
     payload = {'id': agent_id, 'name': agent_name}
 
-    response = await make_request(session, url=url, method='POST', payload=payload)
+    status, data = await make_request(session, url=url, method='POST', payload=payload)
 
-    if response and response.status == 200:
+    if status == 200:
         config_file = Path('/etc/agent/config.json')
         config_content = dict(
             server_url=server_url, agent_id=agent_id, agent_name=agent_name, interval=300
@@ -104,23 +120,44 @@ async def register_agent(
 
     return False
 
+async def check_pending_commands(
+        session: ClientSession,
+        server_url: str,
+        agent_id: str
+) -> list[dict[str, Any]]:
+    """Request the server to check if there are any pending commands for this agent."""
+    logging.info('Checking pending commands.')
+
+    url = f'{server_url}/commands/{agent_id}'
+
+    status, data = await make_request(session, url=url, method='GET')
+
+    if status == 200:
+        return data
+
+    return []
+
 async def send_command_result(
         session: ClientSession,
         server_url: str,
         command_id: str,
+        command: str,
         command_output: dict[str, str]
 ) -> None:
+    """
+    Sends a command result (output) to the server.
+    After a command was executed, the command output must be sent back to the server.
+    """
     url = f'{server_url}/commands/{command_id}/result'
 
     payload = {'output': command_output}
 
-    try:
-        async with session.post(url, json=payload) as resp:
-            if resp.status == 200:
-                print(f'Successfully sent command result for command: {command_id}')
+    status, data = await make_request(session, url=url, method='POST', payload=payload)
 
-    except Exception as e:
-        print(f'Error when sending command result: {e}')
+    if status == 200:
+        logging.info(f'Successfully sent command result for command: {command}')
+    else:
+        logging.error(f'Error when sending command result for command: {command}: {data}')
 
 async def execute_command(
         session: ClientSession,
@@ -128,41 +165,34 @@ async def execute_command(
         command_id: str,
         command: str
 ) -> None:
-    print(f'Executing command: {command}')
-
+    """Execute the given command and send its result to the server."""
     try:
+        logging.info(f'Executing command: {command}')
+
         result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
 
         output = {
-            'stdout': result.stdout,
-            'stderr': result.stderr,
+            'stdout': result.stdout.strip(),
+            'stderr': result.stderr.strip(),
             'returncode': result.returncode
         }
 
-        await send_command_result(session, server_url, command_id, output)
+        logging.info(f'Command output: {output}')
+
+        await send_command_result(
+            session, server_url, command_id, command=command, command_output=output
+        )
 
     except subprocess.TimeoutExpired:
         output = {'stdout': '', 'stderr': 'TimeoutExpired', 'returncode': 1}
 
-        await send_command_result(session, server_url, command_id, output)
+        logging.error(f'Command output: {output}')
+        await send_command_result(
+            session, server_url, command_id, command=command, command_output=output
+        )
 
-    except Exception as e:
-        print(f'Error when executing the command "{command}": {e}')
-
-async def check_pending_commands(
-        session: ClientSession,
-        server_url: str,
-        agent_id: str
-) -> list[dict[str, Any]]:
-    """Request the server to check if there are any pending commands for this agent."""
-    url = f'{server_url}/commands/{agent_id}'
-
-    response = await make_request(session, url=url, method='GET')
-
-    if response and response.status == 200:
-        return await response.json()
-
-    return []
+    except Exception:
+        logging.exception(f'Error when executing the command "{command}":', exc_info=True)
 
 async def main():
     parser = argparse.ArgumentParser(
@@ -196,6 +226,8 @@ async def main():
                 print('Failed :(')
 
     else:
+        logging.info('Running the agent main loop.')
+
         config = await load_config()
 
         server_url = config['server_url']
@@ -205,16 +237,16 @@ async def main():
         async with aiohttp.ClientSession() as session:
             while True:
                 commands_response = await check_pending_commands(session, server_url, agent_id)
-    
+
                 for cmd_response in commands_response:
                     cmd_id = cmd_response.get('id', '')
                     cmd = cmd_response.get('script', {}).get('content')
-    
+
                     if cmd_id and cmd:
                         await execute_command(
                             session, server_url, command_id=cmd_id, command=cmd
                         )
-    
+
                 await asyncio.sleep(interval)
 
 if __name__ == '__main__':

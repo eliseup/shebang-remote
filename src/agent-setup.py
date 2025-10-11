@@ -47,7 +47,9 @@ def systemd_setup(remove: bool = False) -> None:
                ExecStart=/usr/local/bin/agent.py
                Restart=always
                RestartSec=10
-               User=root
+               User=root               
+               StandardOutput=journal
+               StandardError=journal
 
                [Install]
                WantedBy=multi-user.target
