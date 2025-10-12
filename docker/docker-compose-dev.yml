@@ -14,7 +14,7 @@ services:
     depends_on:
       - postgresql
     volumes:
-      - ${PWD}/src/server:/usr/src/server
+      - ${PWD}/src:/usr/src/server
     networks:
       - net-bridge
     ports:

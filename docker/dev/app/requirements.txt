@@ -43,6 +43,8 @@ websockets==15.0.1
 # Extra requirements go here
 aiohttp==3.13.0
 alembic==1.16.5
+discord.py==2.6.4
+emoji==2.15.0
 SQLAlchemy==2.0.43
 pydantic-settings==2.11.0
 psycopg==3.2.10

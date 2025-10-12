@@ -1,7 +1,8 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, InstrumentedAttribute
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 
 from server.database import get_db_session
@@ -21,7 +22,7 @@ def get_object_or_404(
 
     if not obj:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{model.__name__} with id {id_} was not found"
         )
 
@@ -84,11 +85,20 @@ async def create_script(
         session: Session = Depends(get_db_session)
 ):
     """
-    Create a script.
+    Create a script with an uniq name and its content.
     """
     new_script = Script(**model.model_dump())
     session.add(new_script)
-    session.commit()
+
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'Script with name {model.name} already exists.'
+        )
+
     session.refresh(new_script)
 
     return new_script
