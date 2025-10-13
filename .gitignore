@@ -4,6 +4,7 @@
 *.local
 *.local.py
 .env*
+.dbot_auth.db
 
 app.egg-info/
 .idea/

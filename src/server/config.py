@@ -11,7 +11,7 @@ class BaseConfig(BaseSettings):
     DB_HOST_PORT: int
     DB_SSL_MODE: str = 'disable'
 
-    FASTAPI_SETTINGS_NAME: str
+    APP_SETTINGS_NAME: str
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
@@ -29,7 +29,7 @@ class ProdConfig(BaseConfig):
     DB_SSL_MODE: str = 'require'
 
 
-env = os.getenv('FASTAPI_SETTINGS_NAME')
+env = os.getenv('APP_SETTINGS_NAME')
 
 if env == 'production':
     settings = ProdConfig()
