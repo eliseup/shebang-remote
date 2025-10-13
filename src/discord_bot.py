@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+import logging
 import json
 import os
+
 from typing import Any
+from logging.handlers import RotatingFileHandler
 
 import discord
 import aiohttp
@@ -16,11 +19,25 @@ from emoji import emojize
 APP_SERVER_URL = os.environ.get('APP_SERVER_URL')
 DISCORD_ADMIN_USER_ID = int(os.getenv('DISCORD_ADMIN_USER_ID', 0))
 
-description = 'Shebang Remote bot to run Linux commands remotely from Discord.'
-intents = discord.Intents.default()
-intents.message_content = True
+# Logging setup
+logging_file = Path('logs/discord_bot.log')
 
-bot = commands.Bot(command_prefix='!', description=description, intents=intents)
+if not logging_file.parent.exists():
+    logging_file.parent.mkdir()
+
+logging_handler = RotatingFileHandler(
+    filename=logging_file,
+    maxBytes=5000000,
+    backupCount=3,
+)
+
+logging_handler.setLevel(logging.INFO)
+
+logging.basicConfig(
+    handlers=[logging_handler],
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+)
 
 
 class EncryptSerializer(URLSafeSerializer):
@@ -106,19 +123,89 @@ async def is_allowed_user(ctx: commands.Context) -> bool:
     #return user_id in authorized_users or user_id == DISCORD_ADMIN_USER_ID
     return user_id in authorized_users
 
+description = 'Shebang Remote bot to run Linux commands remotely from Discord.'
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(command_prefix='!', description=description, intents=intents)
+
+@bot.event
+async def on_command_error(ctx, error):
+    # Handle "command not found"
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send(
+            f'{emojize(':warning:')} '
+            f'That command doesn’t exist. Try `!help_` for a list of commands.'
+        )
+
+    # Handle missing arguments.
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f'{emojize(':warning:')}️ Missing argument: `{error.param.name.upper()}`')
+
+    # Catch-all fallback for unexpected errors.
+    else:
+        await ctx.send(f'{emojize(":no_entry:")} Oops! Something went wrong. Try again later.')
+        logging.error(f'Unexpected error in command {ctx.command}: {error}')
+
 @bot.event
 async def on_ready():
     assert bot.user is not None
 
-    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
+    msg = f'Logged in as {bot.user} (ID: {bot.user.id})'
+    logging.info(msg)
+
+    print(msg)
     print('------')
+
+@bot.command()
+async def help_(ctx: commands.Context) -> None:
+    f"""Show the help command."""
+    text = f"""    
+    Shebang Remote Bot Commands:
+    
+    {emojize(':small_orange_diamond:')} **No Auth Required Commands**
+    
+    **!help_**
+    _Shows this help message._
+    
+    **!whoami**
+    _Shows the current user info like name and ID._
+    
+    ---
+    
+    {emojize(':small_orange_diamond:')} **Administrative Commands (Admin users only)**
+    
+    **!admin_allow_user** USER_ID
+    _Allow a user to use this bot._
+    
+    **!admin_disallow_user** USER_ID
+    _Disallow a user to use this bot._
+    
+    ---
+    
+    {emojize(':small_orange_diamond:')} **Auth Required Commands**
+    
+    **!list_machines**
+    _List all active machines._
+    
+    **!register_script** "SCRIPT_NAME" "SCRIPT_CONTENT"
+    _Register a script that can be scheduled later to run on a host._
+    > Because the script name and its content may use 
+    words with spaces in between, you should quote them.
+    
+    **!execute_script** SCRIPT_NAME MACHINE_ID
+    _Schedule the execution of the given script to the given machine._
+    > The script name is the same name returned by `!register_script` command.
+    > The machine ID can be obtained using `!list_machines` command.
+    """
+    await ctx.send(text)
 
 @bot.command()
 async def whoami(ctx: commands.Context):
     user = ctx.author
     await ctx.send(
-        f'You are {user.name}\n'
-        f'Your user ID is {user.id}'
+        f'You are **{user.name}**\n'
+        f'Your user ID is **{user.id}**'
     )
 
 @bot.command()
@@ -205,10 +292,14 @@ async def register_script(ctx: commands.Context, name: str, content: str):
 
                     else:
                         data = json.dumps(data, indent=4)
-                        await ctx.send(
+                        msg = (
                             f'{emojize(":slight_frown:")} '
                             f'Não foi possível adicionar este script.\n\n{data}'
                         )
+
+                        logging.error(f'{msg} :: Response code: {response.status}')
+
+                        await ctx.send(msg)
 
                 except Exception:
                     await ctx.send(f'{emojize(":no_entry:")} Ocorreu um erro inesperado.')
@@ -236,10 +327,14 @@ async def execute_script(ctx: commands.Context, name: str, machine_id: str):
 
                     else:
                         data = json.dumps(data, indent=4)
-                        await ctx.send(
+                        msg = (
                             f'{emojize(":slight_frown:")} '
                             f'Não foi possível agendar a execução deste script.\n\n{data}'
                         )
+
+                        logging.error(f'{msg} :: Response code: {response.status}')
+
+                        await ctx.send(msg)
 
                 except Exception:
                     await ctx.send(f'{emojize(":no_entry:")} Ocorreu um erro inesperado.')

@@ -18,7 +18,7 @@ from aiohttp import ClientSession, ContentTypeError
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
-    format="%(name)s - %(levelname)s - %(message)s",
+    format='%(name)s - %(levelname)s - %(message)s',
 )
 
 async def load_config() -> Dict[str, str]:
@@ -87,14 +87,14 @@ async def make_request(
 
 async def register_agent(
         session: ClientSession,
-        APP_SERVER_URL: str,
+        server_url: str,
         agent_id: str,
         agent_name: str
 ) -> bool:
     """
     Register this agent (machine) to the server.
     """
-    url = f'{APP_SERVER_URL}/register_machine'
+    url = f'{server_url}/register_machine'
     payload = {'id': agent_id, 'name': agent_name}
 
     status, data = await make_request(session, url=url, method='POST', payload=payload)
@@ -102,7 +102,7 @@ async def register_agent(
     if status == 200:
         config_file = Path('/etc/agent/config.json')
         config_content = dict(
-            APP_SERVER_URL=APP_SERVER_URL, agent_id=agent_id, agent_name=agent_name, interval=300
+            server_url=server_url, agent_id=agent_id, agent_name=agent_name, interval=300
         )
 
         try:
@@ -122,13 +122,13 @@ async def register_agent(
 
 async def check_pending_commands(
         session: ClientSession,
-        APP_SERVER_URL: str,
+        server_url: str,
         agent_id: str
 ) -> list[dict[str, Any]]:
     """Request the server to check if there are any pending commands for this agent."""
     logging.info('Checking pending commands.')
 
-    url = f'{APP_SERVER_URL}/commands/{agent_id}'
+    url = f'{server_url}/commands/{agent_id}'
 
     status, data = await make_request(session, url=url, method='GET')
 
@@ -139,7 +139,7 @@ async def check_pending_commands(
 
 async def send_command_result(
         session: ClientSession,
-        APP_SERVER_URL: str,
+        server_url: str,
         command_id: str,
         command: str,
         command_output: dict[str, str]
@@ -148,7 +148,7 @@ async def send_command_result(
     Sends a command result (output) to the server.
     After a command was executed, the command output must be sent back to the server.
     """
-    url = f'{APP_SERVER_URL}/commands/{command_id}/result'
+    url = f'{server_url}/commands/{command_id}/result'
 
     payload = {'output': command_output}
 
@@ -161,7 +161,7 @@ async def send_command_result(
 
 async def execute_command(
         session: ClientSession,
-        APP_SERVER_URL: str,
+        server_url: str,
         command_id: str,
         command: str
 ) -> None:
@@ -180,7 +180,7 @@ async def execute_command(
         logging.info(f'Command output: {output}')
 
         await send_command_result(
-            session, APP_SERVER_URL, command_id, command=command, command_output=output
+            session, server_url, command_id, command=command, command_output=output
         )
 
     except subprocess.TimeoutExpired:
@@ -188,7 +188,7 @@ async def execute_command(
 
         logging.error(f'Command output: {output}')
         await send_command_result(
-            session, APP_SERVER_URL, command_id, command=command, command_output=output
+            session, server_url, command_id, command=command, command_output=output
         )
 
     except Exception:
@@ -217,7 +217,7 @@ async def main():
 
         async with aiohttp.ClientSession() as session:
             registered = await register_agent(
-                session, APP_SERVER_URL=args.server, agent_id=agent_id, agent_name=agent_name
+                session, server_url=args.server, agent_id=agent_id, agent_name=agent_name
             )
 
             if registered:
@@ -230,13 +230,13 @@ async def main():
 
         config = await load_config()
 
-        APP_SERVER_URL = config['APP_SERVER_URL']
+        server_url = config['server_url']
         agent_id = config['agent_id']
         interval = config.get('interval', 300)
 
         async with aiohttp.ClientSession() as session:
             while True:
-                commands_response = await check_pending_commands(session, APP_SERVER_URL, agent_id)
+                commands_response = await check_pending_commands(session, server_url, agent_id)
 
                 for cmd_response in commands_response:
                     cmd_id = cmd_response.get('id', '')
@@ -244,7 +244,7 @@ async def main():
 
                     if cmd_id and cmd:
                         await execute_command(
-                            session, APP_SERVER_URL, command_id=cmd_id, command=cmd
+                            session, server_url, command_id=cmd_id, command=cmd
                         )
 
                 await asyncio.sleep(interval)

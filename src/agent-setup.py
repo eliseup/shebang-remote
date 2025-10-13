@@ -44,8 +44,9 @@ def systemd_setup(remove: bool = False) -> None:
                After=network.target
 
                [Service]
+               ExecStartPre=/bin/sleep 15
                ExecStart=/usr/local/bin/agent.py
-               Restart=always
+               Restart=on-failure
                RestartSec=10
                User=root               
                StandardOutput=journal
