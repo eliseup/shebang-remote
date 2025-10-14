@@ -18,12 +18,18 @@ def get_object_or_404(
         column: InstrumentedAttribute,
         id_: str | int
 ):
+    from server.main import logger
+
     obj = session.scalar(select(model).filter(column == id_))
 
     if not obj:
+        detail = f'{model.__name__} with id {id_} was not found'
+
+        logger.error(detail)
+
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"{model.__name__} with id {id_} was not found"
+            detail=detail
         )
 
     return obj
@@ -52,6 +58,8 @@ async def create_update_machine(
     """
     Create or update machines.
     """
+    from server.main import logger
+
     existing_machine = session.scalar(
         select(Machine).filter(Machine.id == model.id)
     )
@@ -64,10 +72,20 @@ async def create_update_machine(
         new_machine.last_seen = now
 
         session.add(new_machine)
-        session.commit()
-        session.refresh(new_machine)
 
-        return new_machine
+        try:
+            session.commit()
+            session.refresh(new_machine)
+
+            return new_machine
+
+        except Exception:
+            session.rollback()
+
+            detail = 'Something went wrong when creating machine.'
+            logger.exception(detail, exc_info=True)
+
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     # Update existing machine.
     for key, value in model.model_dump().items():
@@ -75,8 +93,18 @@ async def create_update_machine(
 
     existing_machine.last_seen = now
 
-    session.commit()
-    session.refresh(existing_machine)
+    try:
+        session.commit()
+        session.refresh(existing_machine)
+
+    except Exception:
+        session.rollback()
+
+        detail = 'Something went wrong when updating machine.'
+        logger.exception(detail, exc_info=True)
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
     return existing_machine
 
 @router.post('/scripts', response_model=ScriptResponseSchema)
@@ -87,17 +115,31 @@ async def create_script(
     """
     Create a script with an uniq name and its content.
     """
+    from server.main import logger
+
     new_script = Script(**model.model_dump())
     session.add(new_script)
 
     try:
         session.commit()
+
     except IntegrityError:
         session.rollback()
+
+        detail = f'Script with name {model.name} already exists.'
+        logger.error(detail, exc_info=True)
+
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f'Script with name {model.name} already exists.'
         )
+
+    except Exception:
+        session.rollback()
+        detail = 'Something went wrong when creating script.'
+        logger.exception(detail, exc_info=True)
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     session.refresh(new_script)
 
@@ -111,6 +153,8 @@ async def schedule_machine_command(
     """
     Schedule a command for a machine.
     """
+    from server.main import logger
+
     pending_status = session.scalar(select(CommandStatusReference).filter(
         CommandStatusReference.title_internal == 'pending'
     ))
@@ -129,10 +173,18 @@ async def schedule_machine_command(
     new_command.status = pending_status
 
     session.add(new_command)
-    session.commit()
-    session.refresh(new_command)
 
-    return new_command
+    try:
+        session.commit()
+        session.refresh(new_command)
+        return new_command
+
+    except Exception:
+        session.rollback()
+        detail = 'Something went wrong when scheduling command.'
+        logger.exception(detail, exc_info=True)
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 @router.get('/commands/{machine_id}', response_model=list[CommandResponseSchema])
 async def list_pending_commands(
@@ -171,6 +223,8 @@ async def store_command_result(
     """
     Stores a result of an executed command.
     """
+    from server.main import logger
+
     completed_status = session.scalar(select(CommandStatusReference).filter(
         CommandStatusReference.title_internal == 'completed'
     ))
@@ -184,5 +238,14 @@ async def store_command_result(
     existing_command.status = completed_status
 
     session.add(existing_command)
-    session.commit()
-    session.refresh(existing_command)
+
+    try:
+        session.commit()
+        session.refresh(existing_command)
+
+    except Exception:
+        session.rollback()
+        detail = 'Something went wrong when storing command result.'
+        logger.exception(detail, exc_info=True)
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)

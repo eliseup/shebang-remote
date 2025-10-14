@@ -1,13 +1,36 @@
+import logging
+
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from fastapi import FastAPI
-
 from sqlalchemy import select
 
 from server.database import get_db_engine, DBSession
 from server.models import BaseModel, CommandStatusReference
 from server.views import router as server_views_router
 
+
+# Logging setup
+logging_file = Path('../logs/app.log')
+
+if not logging_file.parent.exists():
+    logging_file.parent.mkdir()
+
+logger = logging.getLogger('server')
+
+logging_handler = RotatingFileHandler(
+    filename=logging_file,
+    maxBytes=5000000,
+    backupCount=3,
+)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+logging_handler.setLevel(logging.INFO)
+logging_handler.setFormatter(formatter)
+logger.addHandler(logging_handler)
 
 def post_init_database() -> None:
     """Perform post-initialization tasks for the database."""

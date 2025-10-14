@@ -16,8 +16,13 @@ def get_db_engine() -> Engine:
 DBSession = sessionmaker(autocommit=False, autoflush=False, bind=get_db_engine())
 
 def get_db_session() -> Session:
+    from server.main import logger
+
     session = DBSession()
     try:
         yield session
+    except Exception as e:
+        logger.exception('Failed to create session', exc_info=True)
+        raise e
     finally:
         session.close()

@@ -2,7 +2,6 @@ import json
 import re
 import shlex
 
-from dataclasses import field
 from datetime import datetime
 from typing import Set, Iterable
 
@@ -200,7 +199,11 @@ class CommandResultSchema(BaseModel):
 
     @field_validator('output', mode='before')
     def normalize_output(cls, value):
+        from server.main import logger
+
         try:
             return json.dumps(value)
         except TypeError:
+            logger.exception(f'Unable to serialize output "{value}"')
+
             return value
