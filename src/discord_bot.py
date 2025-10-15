@@ -18,7 +18,7 @@ from server.config import settings
 from server.database import get_db_session_ctx
 from server.models import DiscordAuthorizedUser
 
-APP_SERVER_URL = settings.APP_SERVER_URL
+APP_SERVER_URL = settings.APP_SERVER_URL.rstrip('/')
 DISCORD_ADMIN_USER_ID = settings.DISCORD_ADMIN_USER_ID
 
 # Logging setup
