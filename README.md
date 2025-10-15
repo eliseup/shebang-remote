@@ -154,13 +154,40 @@ Before setting up the system, ensure you have:
 ---
   
 ### Verifying Results
-To verify a command's result value check the field _output_ in the _command_ table.
+To verify if a command was executed and its result was stored:
+- Check the field _output_ in the _command_ table.
+- Check agent logs with `sudo journalctl -u agent.service -f` on the agent side.
+- Check server logs with `heroku logs --tail -a shebang-remote-api`
 
 ### Testing
 * Install the agent on a machine;
 * Register a script in the bot with the `!register_script` command;
 * Execute the script on a registered machine using the `!execute_script` command;
 * Verify the output field of the table _command_.
+- **Screenshots**
+<p align="center">
+  <img src="images/bot_help.png" alt="Bot Help Command" width="250">
+</p>
+
+<p align="center">
+  <img src="images/bot_list_machines.png" alt="Bot List Machines Command" width="250">
+</p>
+
+<p align="center">
+  <img src="images/bot_script_and_execute.png" alt="Bot Create Script and Execute" width="250">
+</p>
+
+<p align="center">
+  <img src="images/agent_logs.png" alt="Agent logs" width="250">
+</p>
+
+<p align="center">
+  <img src="images/server_logs.png" alt="Server Logs" width="250">
+</p>
+
+
+---
+
 
 ### Security Notes
 * Always use HTTPS for communication between bot, web service, and agents.
