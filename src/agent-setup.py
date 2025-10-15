@@ -16,7 +16,7 @@ def pre_install_deps() -> None:
 def systemd_setup(remove: bool = False) -> None:
     """Install or remove the systemd service for the Shebang Remote Agent."""
     systemd_file = Path('/etc/systemd/system/agent.service')
-    agent_src = Path('agent.py')
+    agent_src = Path('src/agent.py')
     agent_dest = Path('/usr/local/bin/agent.py')
 
     if remove:

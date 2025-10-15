@@ -230,7 +230,7 @@ async def main():
 
         config = await load_config()
 
-        server_url = config['server_url']
+        server_url = config.get('server_url', '').rstrip('/')
         agent_id = config['agent_id']
         interval = config.get('interval', 300)
 

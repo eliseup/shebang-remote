@@ -101,7 +101,7 @@ async def on_ready():
 
 @bot.command()
 async def help_(ctx: commands.Context) -> None:
-    f"""Show the help command."""
+    """Show the help command."""
     text = f"""    
     Shebang Remote Bot Commands:
     
