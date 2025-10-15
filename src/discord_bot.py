@@ -48,7 +48,7 @@ class EncryptSerializer(URLSafeSerializer):
     """
     def __init__(self):
         secret_key = settings.APP_SECRET_KEY
-        salt = settings.APP_SECRET_SALT
+        salt = settings.APP_SECURITY_SALT
 
         super().__init__(
             secret_key=secret_key,
