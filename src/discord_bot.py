@@ -3,7 +3,6 @@ import logging
 import json
 import sys
 
-from typing import Any
 from logging.handlers import RotatingFileHandler
 
 import discord
@@ -11,12 +10,13 @@ import aiohttp
 
 from pathlib import Path
 
-from itsdangerous import URLSafeSerializer, BadSignature
 from discord.ext import commands
 from emoji import emojize
+from sqlalchemy import select
 
 from server.config import settings
-
+from server.database import get_db_session_ctx
+from server.models import DiscordAuthorizedUser
 
 APP_SERVER_URL = settings.APP_SERVER_URL
 DISCORD_ADMIN_USER_ID = settings.DISCORD_ADMIN_USER_ID
@@ -41,75 +41,12 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
-
-class EncryptSerializer(URLSafeSerializer):
-    """
-    An object that can be used to encrypt any data using the APP SECRET KEY.
-    """
-    def __init__(self):
-        secret_key = settings.APP_SECRET_KEY
-        salt = settings.APP_SECURITY_SALT
-
-        super().__init__(
-            secret_key=secret_key,
-            salt=salt,
-        )
-
-
-def encrypt_data(data: Any) -> str:
-    """Encrypt the given data."""
-    encrypt_serializer = EncryptSerializer()
-    encrypted_data = encrypt_serializer.dumps(data)
-    return encrypted_data
-
-def decrypt_data(encrypted_data: str) -> Any:
-    """
-    Decrypt the given encrypted_data.
-    The encrypted_data should be encrypted using the :func: `encrypt_data`.
-    """
-    encrypt_serializer = EncryptSerializer()
-
-    try:
-        return encrypt_serializer.loads(encrypted_data)
-    except BadSignature:
-        return None
-
-def get_authorized_users_file():
-    """
-    Get the file used to verify if a user is authorized to use this bot.
-    Authorized users must have theirs ID wrote in thi file.
-    """
-    users_file = Path('./.dbot_auth.db')
-
-    if not users_file.exists():
-        users_file.touch()
-
-    return users_file
-
-def save_authorized_users_file(authorized_users: list[int]) -> bool:
-    """
-    Encrypt the given authorized users data and write the content
-    to the authorized users file.
-    """
-    try:
-        file_data = encrypt_data(json.dumps(authorized_users))
-        authorized_users_file = get_authorized_users_file()
-        authorized_users_file.write_text(file_data)
-    except Exception:
-        return False
-
-    return True
-
 def get_authorized_users() -> list[int]:
     """Reads the authorized users file decrypting its content."""
-    users_file = get_authorized_users_file()
-    content = users_file.read_text()
-    content = decrypt_data(content)
+    with get_db_session_ctx() as session:
+        authorized_users = session.scalars(select(DiscordAuthorizedUser)).all()
 
-    try:
-        return json.loads(content)
-    except TypeError:
-        return []
+        return [i.author_id for i in authorized_users]
 
 async def abort_chat(ctx: commands.Context) -> None:
     """Abort chat for not allowed users."""
@@ -120,10 +57,13 @@ async def abort_chat(ctx: commands.Context) -> None:
 async def is_allowed_user(ctx: commands.Context) -> bool:
     """Verify if the user is authorized to use this bot."""
     user_id = ctx.author.id
-    authorized_users = get_authorized_users()
 
-    #return user_id in authorized_users or user_id == DISCORD_ADMIN_USER_ID
-    return user_id in authorized_users
+    with get_db_session_ctx() as session:
+        authorized_user = session.scalar(select(DiscordAuthorizedUser).filter(
+            DiscordAuthorizedUser.author_id == user_id,
+        ))
+
+        return authorized_user is not None
 
 description = 'Shebang Remote bot to run Linux commands remotely from Discord.'
 intents = discord.Intents.default()
@@ -214,20 +154,27 @@ async def whoami(ctx: commands.Context):
 async def admin_allow_user(ctx: commands.Context, user_id: int) -> None:
     """Administrative command to add a new user into authorized users."""
     if ctx.author.id == DISCORD_ADMIN_USER_ID:
-        authorized_users = get_authorized_users()
 
-        if user_id not in authorized_users:
-            authorized_users.append(user_id)
-            success = save_authorized_users_file(authorized_users)
+        with get_db_session_ctx() as session:
+            if not session.scalar(select(DiscordAuthorizedUser).filter(
+                DiscordAuthorizedUser.author_id == user_id,
+            )):
+                try:
+                    session.add(DiscordAuthorizedUser(author_id=user_id))
+                    session.commit()
 
-            if success:
-                await ctx.send(
-                    f'{emojize(":check_mark_button:")} '
-                    f'{ctx.author.name} is now an authorized user.'
-                )
+                    await ctx.send(
+                        f'{emojize(":check_mark_button:")} '
+                        f'{ctx.author.name} is now an authorized user.'
+                    )
 
-            else:
-                await ctx.send(f'{emojize(":no_entry:")} Was not possible to add this user now.')
+                except Exception:
+                    session.rollback()
+                    logging.exception('Something went wrong when adding user to authorized users.')
+
+                    await ctx.send(
+                        f'{emojize(":no_entry:")} Was not possible to add this user now.'
+                    )
 
     else:
         await abort_chat(ctx)
@@ -236,22 +183,31 @@ async def admin_allow_user(ctx: commands.Context, user_id: int) -> None:
 async def admin_disallow_user(ctx: commands.Context, user_id: int) -> None:
     """Administrative command to remove a user from authorized users."""
     if ctx.author.id == DISCORD_ADMIN_USER_ID:
-        authorized_users = get_authorized_users()
 
-        if user_id in authorized_users:
-            authorized_users.remove(user_id)
-            success = save_authorized_users_file(authorized_users)
+        with get_db_session_ctx() as session:
+            existing_user = session.scalar(select(DiscordAuthorizedUser).filter(
+                DiscordAuthorizedUser.author_id == user_id,
+            ))
 
-            if success:
-                await ctx.send(
-                    f'{emojize(":check_mark_button:")} '
-                    f'{ctx.author.name} was removed from authorized users.'
-                )
+            if existing_user:
+                try:
+                    session.delete(existing_user)
+                    session.commit()
 
-            else:
-                await ctx.send(
-                    f'{emojize(":no_entry:")} Was not possible to disallow this user now.'
-                )
+                    await ctx.send(
+                        f'{emojize(":check_mark_button:")} '
+                        f'{ctx.author.name} was removed from authorized users.'
+                    )
+
+                except Exception:
+                    session.rollback()
+                    logging.exception(
+                        'Something went wrong when removing user from authorized users.'
+                    )
+
+                    await ctx.send(
+                        f'{emojize(":no_entry:")} Was not possible to disallow this user now.'
+                    )
 
     else:
         await abort_chat(ctx)

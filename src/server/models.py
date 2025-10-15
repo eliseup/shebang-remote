@@ -2,7 +2,7 @@ import datetime
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, MetaData, String, Text, TIMESTAMP, DATE, ForeignKey
+from sqlalchemy import func, MetaData, String, Text, TIMESTAMP, DATE, ForeignKey, BigInteger
 from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column, relationship
 
 
@@ -15,6 +15,7 @@ class BaseTypes:
     type text = str
     type timestamp = datetime.datetime
     type date = datetime.date
+    type bigint = int
 
 
 NAMING_CONVENTION = {
@@ -42,6 +43,7 @@ class BaseModel(DeclarativeBase):
         BaseTypes.text: Text(),
         BaseTypes.timestamp: TIMESTAMP(timezone=True),
         BaseTypes.date: DATE,
+        BaseTypes.bigint: BigInteger,
     }
 
     created_at: Mapped[BaseTypes.timestamp] = mapped_column(
@@ -156,3 +158,10 @@ class Command(BaseModel):
     status: Mapped[CommandStatusReference] = relationship()
 
     output: Mapped[BaseTypes.text | None]
+
+
+class DiscordAuthorizedUser(BaseModel):
+    """
+    The Discord Authorized Users model class used by Discord bot to store authorized users IDs.
+    """
+    author_id: Mapped[BaseTypes.bigint] = mapped_column(primary_key=True)
