@@ -14,7 +14,7 @@ from server.views import router as server_views_router
 
 
 # Logging setup
-logging_file = Path('../logs/app.log')
+logging_file = Path('logs/app.log')
 
 if not logging_file.parent.exists():
     logging_file.parent.mkdir()
