@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
@@ -31,6 +32,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 logging_handler.setLevel(logging.INFO)
 logging_handler.setFormatter(formatter)
 logger.addHandler(logging_handler)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 def post_init_database() -> None:
     """Perform post-initialization tasks for the database."""

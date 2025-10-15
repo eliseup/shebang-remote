@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import json
-import os
+import sys
 
 from typing import Any
 from logging.handlers import RotatingFileHandler
@@ -15,9 +15,11 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from discord.ext import commands
 from emoji import emojize
 
+from server.config import settings
 
-APP_SERVER_URL = os.environ.get('APP_SERVER_URL')
-DISCORD_ADMIN_USER_ID = int(os.getenv('DISCORD_ADMIN_USER_ID', 0))
+
+APP_SERVER_URL = settings.APP_SERVER_URL
+DISCORD_ADMIN_USER_ID = settings.DISCORD_ADMIN_USER_ID
 
 # Logging setup
 logging_file = Path('logs/discord_bot.log')
@@ -34,7 +36,7 @@ logging_handler = RotatingFileHandler(
 logging_handler.setLevel(logging.INFO)
 
 logging.basicConfig(
-    handlers=[logging_handler],
+    handlers=[logging_handler, logging.StreamHandler(sys.stdout)],
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
 )
@@ -45,8 +47,8 @@ class EncryptSerializer(URLSafeSerializer):
     An object that can be used to encrypt any data using the APP SECRET KEY.
     """
     def __init__(self):
-        secret_key = os.getenv('APP_SECRET_KEY')
-        salt = os.getenv('APP_SECURITY_SALT')
+        secret_key = settings.APP_SECRET_KEY
+        salt = settings.APP_SECRET_SALT
 
         super().__init__(
             secret_key=secret_key,
@@ -342,4 +344,4 @@ async def execute_script(ctx: commands.Context, name: str, machine_id: str):
         else:
             await abort_chat(ctx)
 
-bot.run(os.getenv("DISCORD_BOT_TOKEN"))
+bot.run(settings.DISCORD_BOT_TOKEN)

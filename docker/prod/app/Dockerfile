@@ -16,7 +16,7 @@ COPY --from=builder /tmp/wheels /tmp/wheels
 
 # APT packages
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends supervisor libpq-dev libssl-dev && \
+    apt-get install -y --no-install-recommends libpq-dev libssl-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     pip install --upgrade pip && \
     pip install --no-cache --no-cache-dir /tmp/wheels/* && \
@@ -26,9 +26,11 @@ RUN apt-get update && \
     adduser --uid 1000 --system --group app && \
     mkdir -p /usr/src/server
 
+# Application files
+COPY src/server /usr/src/server
 RUN chown app. /usr/src/server -R
 
 WORKDIR /usr/src/server
 USER app
 
-CMD ["tail", "-f", "/dev/null"]
+CMD ["fastapi", "run", "main.py"]

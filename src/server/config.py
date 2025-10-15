@@ -4,14 +4,22 @@ from pydantic_settings import BaseSettings
 
 
 class BaseConfig(BaseSettings):
+    APP_SETTINGS_NAME: str
+    APP_SERVER_URL: str
+    APP_SECRET_KEY: str
+    APP_SECURITY_SALT: str
+
+    DISCORD_BOT_TOKEN: str
+    DISCORD_ADMIN_USER_ID: int
+
+
+class DevConfig(BaseConfig):
     DB_USER: str
     DB_PASSWORD: str
     DB_NAME: str
     DB_HOST: str
     DB_HOST_PORT: int
     DB_SSL_MODE: str = 'disable'
-
-    APP_SETTINGS_NAME: str
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
@@ -21,12 +29,14 @@ class BaseConfig(BaseSettings):
                 f'?sslmode={self.DB_SSL_MODE}')
 
 
-class DevConfig(BaseConfig):
-    pass
-
-
 class ProdConfig(BaseConfig):
-    DB_SSL_MODE: str = 'require'
+    DATABASE_URL: str
+
+    @property
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        return self.DATABASE_URL.replace(
+            "postgres://", "postgresql+psycopg://", 1
+        )
 
 
 env = os.getenv('APP_SETTINGS_NAME')
