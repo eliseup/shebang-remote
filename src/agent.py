@@ -217,7 +217,10 @@ async def main():
 
         async with aiohttp.ClientSession() as session:
             registered = await register_agent(
-                session, server_url=args.server, agent_id=agent_id, agent_name=agent_name
+                session,
+                server_url=args.server.rstrip('/'),
+                agent_id=agent_id,
+                agent_name=agent_name
             )
 
             if registered:
